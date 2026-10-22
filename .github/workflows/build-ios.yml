@@ -1,0 +1,54 @@
+name: Build Native iOS App (.ipa) on Cloud Mac
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-ios-ipa:
+    name: Compile Swift/SwiftUI App on macOS + Xcode
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 15
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: |
+          brew install xcodegen
+
+      - name: Generate Xcode Project (.xcodeproj) from project.yml
+        run: |
+          xcodegen generate
+
+      - name: Build Native iOS Release Archive (No Apple Cert Required for Sideloadly .ipa)
+        run: |
+          xcodebuild clean build \
+            -project NexFieldDrawings.xcodeproj \
+            -scheme NexFieldDrawings \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package .app into Installable NexFieldDrawings.ipa
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/NexFieldDrawings.app Payload/
+          zip -r -9 NexFieldDrawings.ipa Payload
+          ls -lh NexFieldDrawings.ipa
+
+      - name: Upload NexFieldDrawings.ipa Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexFieldDrawings-iOS-IPA
+          path: NexFieldDrawings.ipa
+          retention-days: 90
