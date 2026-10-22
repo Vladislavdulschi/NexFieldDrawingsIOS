@@ -5,6 +5,9 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-ios-ipa:
     name: Compile Swift/SwiftUI App on macOS + Xcode
@@ -13,6 +16,46 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Prepare Swift & XcodeGen Config
+        run: |
+          sed -i '' 's/trimmingCharacters(inSpacesAndNewlines)/trimmingCharacters(in: .whitespacesAndNewlines)/g' NexFieldDrawings/Models/Models.swift
+          cat << 'EOF' > project.yml
+          name: NexFieldDrawings
+          options:
+            bundleIdPrefix: uk.co.nexfield
+            deploymentTarget:
+              iOS: "16.0"
+            xcodeVersion: "15.0"
+            generateEmptyDirectories: true
+
+          settings:
+            base:
+              PRODUCT_BUNDLE_IDENTIFIER: uk.co.nexfield.drawings
+              MARKETING_VERSION: "1.4.0"
+              CURRENT_PROJECT_VERSION: "14"
+              SWIFT_VERSION: "5.9"
+              TARGETED_DEVICE_FAMILY: "1,2"
+              GENERATE_INFOPLIST_FILE: NO
+
+          targets:
+            NexFieldDrawings:
+              type: application
+              platform: iOS
+              deploymentTarget: "16.0"
+              sources:
+                - path: NexFieldDrawings
+                  excludes:
+                    - Info.plist
+              settings:
+                base:
+                  INFOPLIST_FILE: NexFieldDrawings/Info.plist
+                  GENERATE_INFOPLIST_FILE: NO
+                  CODE_SIGN_STYLE: Manual
+                  CODE_SIGNING_REQUIRED: NO
+                  CODE_SIGNING_ALLOWED: NO
+                  ENABLE_PREVIEWS: NO
+          EOF
 
       - name: Select Xcode 15
         run: |
@@ -27,8 +70,9 @@ jobs:
         run: |
           xcodegen generate
 
-      - name: Build Native iOS Release Archive (No Apple Cert Required for Sideloadly .ipa)
+      - name: Build Native iOS Release Archive & Package .ipa
         run: |
+          set -o pipefail
           xcodebuild clean build \
             -project NexFieldDrawings.xcodeproj \
             -scheme NexFieldDrawings \
@@ -37,14 +81,23 @@ jobs:
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
-
-      - name: Package .app into Installable NexFieldDrawings.ipa
-        run: |
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/NexFieldDrawings.app Payload/
           zip -r -9 NexFieldDrawings.ipa Payload
           ls -lh NexFieldDrawings.ipa
+
+      - name: Publish Public Release with NexFieldDrawings.ipa
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f NexFieldDrawings.ipa ]; then
+            gh release create v1.4.0 NexFieldDrawings.ipa build.log --title "NexField Drawings iOS v1.4.0" --notes "Automated Native iOS .ipa Build" --clobber
+          else
+            gh release create v1.4.0 build.log --title "NexField Drawings Build Log" --notes "Build log" --clobber
+            exit 1
+          fi
 
       - name: Upload NexFieldDrawings.ipa Build Artifact
         uses: actions/upload-artifact@v4
