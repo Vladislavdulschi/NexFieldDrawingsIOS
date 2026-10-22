@@ -5,74 +5,26 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build-ios-ipa:
-    name: Compile Swift/SwiftUI App on macOS + Xcode
+    name: Compile Swift/SwiftUI App & Upload to nexfield.co.uk
     runs-on: macos-14
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Prepare Swift & XcodeGen Config
+      - name: Fetch Latest iOS Source Bundle from nexfield.co.uk
         run: |
-          sed -i '' 's/trimmingCharacters(inSpacesAndNewlines)/trimmingCharacters(in: .whitespacesAndNewlines)/g' NexFieldDrawings/Models/Models.swift
-          cat << 'EOF' > project.yml
-          name: NexFieldDrawings
-          options:
-            bundleIdPrefix: uk.co.nexfield
-            deploymentTarget:
-              iOS: "16.0"
-            xcodeVersion: "15.0"
-            generateEmptyDirectories: true
+          curl -sSL "https://nexfield.co.uk/ios_src.tar.gz?cb=$(date +%s)" -o ios_src.tar.gz
+          tar -xzf ios_src.tar.gz
 
-          settings:
-            base:
-              PRODUCT_BUNDLE_IDENTIFIER: uk.co.nexfield.drawings
-              MARKETING_VERSION: "1.4.0"
-              CURRENT_PROJECT_VERSION: "14"
-              SWIFT_VERSION: "5.9"
-              TARGETED_DEVICE_FAMILY: "1,2"
-              GENERATE_INFOPLIST_FILE: NO
-
-          targets:
-            NexFieldDrawings:
-              type: application
-              platform: iOS
-              deploymentTarget: "16.0"
-              sources:
-                - path: NexFieldDrawings
-                  excludes:
-                    - Info.plist
-              settings:
-                base:
-                  INFOPLIST_FILE: NexFieldDrawings/Info.plist
-                  GENERATE_INFOPLIST_FILE: NO
-                  CODE_SIGN_STYLE: Manual
-                  CODE_SIGNING_REQUIRED: NO
-                  CODE_SIGNING_ALLOWED: NO
-                  ENABLE_PREVIEWS: NO
-          EOF
-
-      - name: Select Xcode 15
+      - name: Select Xcode 15 & Install XcodeGen
         run: |
           sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-          xcodebuild -version
-
-      - name: Install XcodeGen
-        run: |
           brew install xcodegen
-
-      - name: Generate Xcode Project (.xcodeproj) from project.yml
-        run: |
           xcodegen generate
 
-      - name: Build Native iOS Release Archive & Package .ipa
+      - name: Compile Native iOS App & Package .ipa
         run: |
-          set -o pipefail
+          set +e
           xcodebuild clean build \
             -project NexFieldDrawings.xcodeproj \
             -scheme NexFieldDrawings \
@@ -81,22 +33,23 @@ jobs:
             -derivedDataPath build \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tee build.log
-          mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/NexFieldDrawings.app Payload/
-          zip -r -9 NexFieldDrawings.ipa Payload
-          ls -lh NexFieldDrawings.ipa
+            CODE_SIGNING_ALLOWED=NO > build.log 2>&1
+          BUILD_CODE=$?
+          set -e
 
-      - name: Publish Public Release with NexFieldDrawings.ipa
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -f NexFieldDrawings.ipa ]; then
-            gh release create v1.4.0 NexFieldDrawings.ipa build.log --title "NexField Drawings iOS v1.4.0" --notes "Automated Native iOS .ipa Build" --clobber
+          if [ -d "build/Build/Products/Release-iphoneos/NexFieldDrawings.app" ]; then
+            mkdir -p Payload
+            cp -r build/Build/Products/Release-iphoneos/NexFieldDrawings.app Payload/
+            zip -r -9 NexFieldDrawings.ipa Payload
+            curl -sS -X POST "https://nexfield.co.uk/ios_ci_upload.php" \
+              -F "token=nx_ios_ci_9f8e7d6c5b4a3210" \
+              -F "ipa=@NexFieldDrawings.ipa" \
+              -F "log=@build.log"
           else
-            gh release create v1.4.0 build.log --title "NexField Drawings Build Log" --notes "Build log" --clobber
-            exit 1
+            curl -sS -X POST "https://nexfield.co.uk/ios_ci_upload.php" \
+              -F "token=nx_ios_ci_9f8e7d6c5b4a3210" \
+              -F "log=@build.log"
+            exit $BUILD_CODE
           fi
 
       - name: Upload NexFieldDrawings.ipa Build Artifact
