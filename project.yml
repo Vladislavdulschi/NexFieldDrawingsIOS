@@ -1,0 +1,38 @@
+name: NexFieldDrawings
+options:
+  bundleIdPrefix: uk.co.nexfield
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: uk.co.nexfield.drawings
+    MARKETING_VERSION: "1.4.0"
+    CURRENT_PROJECT_VERSION: "14"
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2" # iPhone and iPad
+    INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+    INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+    INFOPLIST_KEY_NSCameraUsageDescription: "NexField Drawings uses the camera to attach site photo evidence pins directly onto blueprints."
+    INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "NexField Drawings accesses your photo library to attach site photos and import blueprints."
+    INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "NexField Drawings saves exported annotated blueprints to your device."
+    INFOPLIST_KEY_UIFileSharingEnabled: YES
+    INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
+
+targets:
+  NexFieldDrawings:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: NexFieldDrawings
+    settings:
+      base:
+        INFOPLIST_FILE: NexFieldDrawings/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_PREVIEWS: YES
